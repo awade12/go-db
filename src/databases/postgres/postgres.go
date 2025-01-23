@@ -60,7 +60,6 @@ type Config struct {
 	Locale        string            // database locale
 }
 
-// DefaultConfig returns a basic configuration with a given name
 func DefaultConfig(name string) *Config {
 	if name == "" {
 		name = "postgres-" + time.Now().Format("20060102-150405")
@@ -126,8 +125,12 @@ func CreateWithConfig(cfg *Config) error {
 		{
 			name: "Pulling PostgreSQL image",
 			fn: func() error {
-				cmd := exec.Command("docker", "pull", fmt.Sprintf("postgres:%s", cfg.Version))
-				return cmd.Run()
+				// Only pull if image doesn't exist
+				if out, _ := exec.Command("docker", "images", "-q", fmt.Sprintf("postgres:%s", cfg.Version)).Output(); len(out) == 0 {
+					cmd := exec.Command("docker", "pull", fmt.Sprintf("postgres:%s", cfg.Version))
+					return cmd.Run()
+				}
+				return nil
 			},
 		},
 		{
@@ -239,13 +242,13 @@ func buildDockerArgs(cfg *Config) []string {
 }
 
 func waitForPostgres(cfg *Config) error {
-	maxAttempts := 30
+	maxAttempts := 10 // Reduced from 30
 	for i := 0; i < maxAttempts; i++ {
 		cmd := exec.Command("docker", "exec", cfg.ContainerName, "pg_isready")
 		if err := cmd.Run(); err == nil {
 			return nil
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond) // Reduced from 1 second
 	}
 	return fmt.Errorf("timeout waiting for PostgreSQL to be ready")
 }
