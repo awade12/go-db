@@ -41,10 +41,15 @@ func printUsage() {
 	fmt.Println("  start <name>   Start a stopped database container")
 	fmt.Println("  stop <name>    Stop a running database container")
 	fmt.Println("  remove <name>  Remove a database container (use --force to force removal)")
+	fmt.Println("\nExamples:")
+	fmt.Println("  go-db create postgres")
+	fmt.Println("  go-db create-custom postgres --version 15 --port 5432 --password mysecretpassword --user myuser --db mydb --volume /data/postgres")
+	fmt.Println("  go-db start mydb")
+	fmt.Println("  go-db stop mydb")
+	fmt.Println("  go-db remove mydb --force")
 }
 
 func main() {
-	// Parse initial args
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
