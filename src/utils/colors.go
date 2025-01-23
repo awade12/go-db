@@ -18,6 +18,7 @@ var (
 	Info     = color.New(color.FgCyan).SprintFunc()
 	Warn     = color.New(color.FgYellow).SprintFunc()
 	ErrColor = color.New(color.FgRed, color.Bold).SprintFunc()
+	ResetColor = color.New(color.Reset).SprintFunc()
 )
 
 // GetOutboundIP gets the preferred outbound IPv4 address of this machine

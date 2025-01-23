@@ -361,3 +361,99 @@ func printConnectionDetails(cfg *Config) {
 			info("→"), cfg.Username, cfg.Password, publicIP, cfg.Port, cfg.Database)
 	}
 }
+
+// List displays all PostgreSQL containers (both running and stopped)
+func List() error {
+	fmt.Printf("%s Listing PostgreSQL containers...\n", info("ℹ"))
+
+	cmd := exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("%s Failed to list containers: %v", errColor("✘"), err)
+	}
+
+	if len(output) == 0 {
+		fmt.Printf("%s No PostgreSQL containers found\n", warn("⚠"))
+		return nil
+	}
+
+	fmt.Printf("\n%-30s %-20s %-30s\n", "NAME", "STATUS", "PORTS")
+	fmt.Printf("%s\n", strings.Repeat("-", 80))
+
+	containers := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, container := range containers {
+		fields := strings.Split(container, "\t")
+		if len(fields) == 3 {
+			name := fields[0]
+			status := fields[1]
+			ports := fields[2]
+
+			statusColor := warn
+			if strings.HasPrefix(status, "Up") {
+				statusColor = success
+			}
+
+			fmt.Printf("%-30s %s%-20s%s %-30s\n",
+				name,
+				statusColor(""), status, utils.ResetColor(),
+				ports)
+		}
+	}
+	fmt.Println()
+	return nil
+}
+
+// ShowConnectionDetails displays connection information for a specific container
+func ShowConnectionDetails(containerName string) error {
+	if exists, _ := containerExists(containerName); !exists {
+		return fmt.Errorf("%s Container %s does not exist", errColor("✘"), containerName)
+	}
+
+	// Get container details using docker inspect
+	cmd := exec.Command("docker", "inspect",
+		"--format",
+		"{{range $k, $v := .Config.Env}}{{$v}}{{println}}{{end}}",
+		containerName)
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("%s Failed to get container details: %v", errColor("✘"), err)
+	}
+
+	// Parse environment variables
+	env := make(map[string]string)
+	for _, line := range strings.Split(string(output), "\n") {
+		if parts := strings.SplitN(line, "=", 2); len(parts) == 2 {
+			env[parts[0]] = parts[1]
+		}
+	}
+
+	// Get port mapping
+	cmd = exec.Command("docker", "inspect",
+		"--format",
+		"{{range $p, $conf := .NetworkSettings.Ports}}{{if eq $p \"5432/tcp\"}}{{range $conf}}{{.HostPort}}{{end}}{{end}}{{end}}",
+		containerName)
+	portBytes, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("%s Failed to get port mapping: %v", errColor("✘"), err)
+	}
+	port := strings.TrimSpace(string(portBytes))
+
+	// Create a temporary config to reuse the existing printConnectionDetails function
+	cfg := &Config{
+		ContainerName: containerName,
+		Port:          port,
+		Username:      strings.TrimPrefix(env["POSTGRES_USER"], "POSTGRES_USER="),
+		Password:      strings.TrimPrefix(env["POSTGRES_PASSWORD"], "POSTGRES_PASSWORD="),
+		Database:      strings.TrimPrefix(env["POSTGRES_DB"], "POSTGRES_DB="),
+	}
+
+	if cfg.Username == "" {
+		cfg.Username = "postgres" // default username if not set
+	}
+	if cfg.Database == "" {
+		cfg.Database = cfg.Username // default database if not set
+	}
+
+	printConnectionDetails(cfg)
+	return nil
+}
