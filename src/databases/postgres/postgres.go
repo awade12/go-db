@@ -410,22 +410,22 @@ func List() error {
 
 			// Status formatting
 			statusColor := warn
-			statusSymbol := "⭘"
+			statusSymbol := "🔴" // Red circle for stopped
 			if strings.HasPrefix(status, "Up") {
 				statusColor = success
-				statusSymbol = "⬤"
+				statusSymbol = "🟢" // Green circle for running
 			}
 
 			// Format the status to be more concise
-			shortStatus := "Stopped"
+			shortStatus := "Stopped ⏹️"
 			if strings.HasPrefix(status, "Up") {
 				upTime := strings.TrimPrefix(status, "Up ")
-				shortStatus = "Up " + upTime
+				shortStatus = "Running ⏵️ " + upTime
 			}
 
-			fmt.Printf("  %-20s %s %-15s%s %-15s %s\n",
+			fmt.Printf("  %-20s %s  %-25s%s %-15s %s\n",
 				info(name),
-				statusColor(statusSymbol),
+				statusSymbol,
 				statusColor(shortStatus),
 				utils.ResetColor(),
 				port,
