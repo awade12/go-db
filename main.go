@@ -10,7 +10,7 @@ import (
 )
 
 func printUsage() {
-	fmt.Println("Usage: go-dbs <command> <database-type> [options]")
+	fmt.Println("Usage: go-db <command> <database-type> [options]")
 	fmt.Println("\nCommands:")
 	fmt.Println("  create         Create a new database (easy mode)")
 	fmt.Println("  create-custom  Create a new database with custom configuration")
