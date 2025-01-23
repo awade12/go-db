@@ -2,8 +2,20 @@ package postgres
 
 import (
 	"fmt"
+	"net"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/fatih/color"
+	"github.com/schollz/progressbar/v3"
+)
+
+var (
+	success  = color.New(color.FgGreen, color.Bold).SprintFunc()
+	info     = color.New(color.FgCyan).SprintFunc()
+	warn     = color.New(color.FgYellow).SprintFunc()
+	errColor = color.New(color.FgRed, color.Bold).SprintFunc()
 )
 
 const (
@@ -12,6 +24,19 @@ const (
 	defaultPassword        = "postgres"
 	defaultContainerName   = "go-dbs-postgres"
 )
+
+// findAvailablePort finds an available port starting from the given port
+func findAvailablePort(startPort int) (int, error) {
+	for port := startPort; port < startPort+100; port++ {
+		addr := fmt.Sprintf(":%d", port)
+		listener, err := net.Listen("tcp", addr)
+		if err == nil {
+			listener.Close()
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("no available ports found in range %d-%d", startPort, startPort+100)
+}
 
 // Config holds PostgreSQL configuration options
 type Config struct {
@@ -61,26 +86,91 @@ func Create() error {
 // CreateWithConfig sets up a new PostgreSQL instance with custom configuration
 func CreateWithConfig(cfg *Config) error {
 	if cfg == nil {
-		return fmt.Errorf("configuration cannot be nil")
+		return fmt.Errorf("%s configuration cannot be nil", errColor("✘"))
 	}
+
+	fmt.Printf("%s Starting PostgreSQL setup...\n", info("ℹ"))
 
 	// Check if Docker is installed
 	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker is not installed: %v", err)
+		return fmt.Errorf("%s Docker is not installed: %v", errColor("✘"), err)
 	}
 
 	// Check if container already exists
 	if exists, _ := containerExists(cfg.ContainerName); exists {
-		return fmt.Errorf("container %s already exists. use 'docker rm %s' to remove it first", cfg.ContainerName, cfg.ContainerName)
+		return fmt.Errorf("%s Container %s already exists. Use 'go-db remove %s' to remove it first",
+			errColor("✘"), cfg.ContainerName, cfg.ContainerName)
 	}
 
-	// Pull the PostgreSQL image
-	pullCmd := exec.Command("docker", "pull", fmt.Sprintf("postgres:%s", cfg.Version))
-	if err := pullCmd.Run(); err != nil {
-		return fmt.Errorf("failed to pull PostgreSQL image: %v", err)
+	// Find available port if default is taken
+	if cfg.Port == defaultPort {
+		port, err := findAvailablePort(5432)
+		if err != nil {
+			return fmt.Errorf("%s Failed to find available port: %v", errColor("✘"), err)
+		}
+		cfg.Port = fmt.Sprintf("%d", port)
+		if cfg.Port != defaultPort {
+			fmt.Printf("%s Port %s was taken, using port %s instead\n", info("ℹ"), defaultPort, cfg.Port)
+		}
 	}
 
-	// Build docker run command with all options
+	steps := []struct {
+		name string
+		fn   func() error
+	}{
+		{
+			name: "Pulling PostgreSQL image",
+			fn: func() error {
+				cmd := exec.Command("docker", "pull", fmt.Sprintf("postgres:%s", cfg.Version))
+				return cmd.Run()
+			},
+		},
+		{
+			name: "Creating container",
+			fn: func() error {
+				args := buildDockerArgs(cfg)
+				cmd := exec.Command("docker", args...)
+				return cmd.Run()
+			},
+		},
+		{
+			name: "Waiting for container to be ready",
+			fn: func() error {
+				return waitForPostgres(cfg)
+			},
+		},
+	}
+
+	bar := progressbar.NewOptions(len(steps),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetWidth(30),
+		progressbar.OptionSetDescription("[cyan]Setting up PostgreSQL[reset]"),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerHead:    "[green]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}))
+
+	for _, step := range steps {
+		bar.Describe(fmt.Sprintf("[cyan]%s[reset]", step.name))
+		if err := step.fn(); err != nil {
+			fmt.Printf("\n%s %s failed: %v\n", errColor("✘"), step.name, err)
+			return fmt.Errorf("failed during %s: %v", step.name, err)
+		}
+		bar.Add(1)
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	fmt.Printf("\n%s PostgreSQL container created successfully!\n", success("✔"))
+	printConnectionDetails(cfg)
+
+	return nil
+}
+
+func buildDockerArgs(cfg *Config) []string {
 	args := []string{
 		"run",
 		"--name", cfg.ContainerName,
@@ -140,53 +230,58 @@ func CreateWithConfig(cfg *Config) error {
 	// Add image name
 	args = append(args, fmt.Sprintf("postgres:%s", cfg.Version))
 
-	// Create and start the PostgreSQL container
-	createCmd := exec.Command("docker", args...)
-	if err := createCmd.Run(); err != nil {
-		return fmt.Errorf("failed to create PostgreSQL container: %v", err)
+	return args
+}
+
+func waitForPostgres(cfg *Config) error {
+	maxAttempts := 30
+	for i := 0; i < maxAttempts; i++ {
+		cmd := exec.Command("docker", "exec", cfg.ContainerName, "pg_isready")
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+		time.Sleep(1 * time.Second)
 	}
-
-	fmt.Printf("PostgreSQL container created successfully!\n")
-	printConnectionDetails(cfg)
-
-	return nil
+	return fmt.Errorf("timeout waiting for PostgreSQL to be ready")
 }
 
 func Stop(containerName string) error {
 	if exists, running := containerExists(containerName); !exists {
-		return fmt.Errorf("container %s does not exist", containerName)
+		return fmt.Errorf("%s Container %s does not exist", errColor("✘"), containerName)
 	} else if !running {
-		return fmt.Errorf("container %s is already stopped", containerName)
+		return fmt.Errorf("%s Container %s is already stopped", warn("⚠"), containerName)
 	}
 
+	fmt.Printf("%s Stopping container %s...\n", info("ℹ"), containerName)
 	cmd := exec.Command("docker", "stop", containerName)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to stop container: %v", err)
+		return fmt.Errorf("%s Failed to stop container: %v", errColor("✘"), err)
 	}
 
-	fmt.Printf("Container %s stopped successfully\n", containerName)
+	fmt.Printf("%s Container %s stopped successfully\n", success("✔"), containerName)
 	return nil
 }
 
 func Start(containerName string) error {
 	if exists, running := containerExists(containerName); !exists {
-		return fmt.Errorf("container %s does not exist", containerName)
+		return fmt.Errorf("%s Container %s does not exist", errColor("✘"), containerName)
 	} else if running {
-		return fmt.Errorf("container %s is already running", containerName)
+		return fmt.Errorf("%s Container %s is already running", warn("⚠"), containerName)
 	}
 
+	fmt.Printf("%s Starting container %s...\n", info("ℹ"), containerName)
 	cmd := exec.Command("docker", "start", containerName)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to start container: %v", err)
+		return fmt.Errorf("%s Failed to start container: %v", errColor("✘"), err)
 	}
 
-	fmt.Printf("Container %s started successfully\n", containerName)
+	fmt.Printf("%s Container %s started successfully\n", success("✔"), containerName)
 	return nil
 }
 
 func Remove(containerName string, force bool) error {
 	if exists, _ := containerExists(containerName); !exists {
-		return fmt.Errorf("container %s does not exist", containerName)
+		return fmt.Errorf("%s Container %s does not exist", errColor("✘"), containerName)
 	}
 
 	args := []string{"rm"}
@@ -195,12 +290,13 @@ func Remove(containerName string, force bool) error {
 	}
 	args = append(args, containerName)
 
+	fmt.Printf("%s Removing container %s...\n", info("ℹ"), containerName)
 	cmd := exec.Command("docker", args...)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to remove container: %v", err)
+		return fmt.Errorf("%s Failed to remove container: %v", errColor("✘"), err)
 	}
 
-	fmt.Printf("Container %s removed successfully\n", containerName)
+	fmt.Printf("%s Container %s removed successfully\n", success("✔"), containerName)
 	return nil
 }
 
@@ -218,23 +314,27 @@ func containerExists(name string) (exists bool, running bool) {
 	return true, strings.HasPrefix(status, "Up")
 }
 
-// ? will print the conn details for the containers
 func printConnectionDetails(cfg *Config) {
-	fmt.Printf("Connection details:\n")
-	fmt.Printf("  Host: localhost\n")
-	fmt.Printf("  Port: %s\n", cfg.Port)
-	fmt.Printf("  User: %s\n", cfg.Username)
-	fmt.Printf("  Password: %s\n", cfg.Password)
-	fmt.Printf("  Database: %s\n", cfg.Database)
+	fmt.Printf("\n%s Connection Details:\n", info("ℹ"))
+	fmt.Printf("  %s Host: %s\n", info("→"), "0.0.0.0")
+	fmt.Printf("  %s Port: %s\n", info("→"), cfg.Port)
+	fmt.Printf("  %s User: %s\n", info("→"), cfg.Username)
+	fmt.Printf("  %s Password: %s\n", info("→"), cfg.Password)
+	fmt.Printf("  %s Database: %s\n", info("→"), cfg.Database)
 	if cfg.Volume != "" {
-		fmt.Printf("  Data Volume: %s\n", cfg.Volume)
+		fmt.Printf("  %s Data Volume: %s\n", info("→"), cfg.Volume)
 	}
 	if cfg.SSLMode != "disable" {
-		fmt.Printf("  SSL Mode: %s\n", cfg.SSLMode)
+		fmt.Printf("  %s SSL Mode: %s\n", info("→"), cfg.SSLMode)
 	}
-	fmt.Printf("\nManagement Commands:\n")
-	fmt.Printf("  Stop:    docker stop %s\n", cfg.ContainerName)
-	fmt.Printf("  Start:   docker start %s\n", cfg.ContainerName)
-	fmt.Printf("  Remove:  docker rm %s\n", cfg.ContainerName)
-	fmt.Printf("  Logs:    docker logs %s\n", cfg.ContainerName)
+
+	fmt.Printf("\n%s Management Commands:\n", info("ℹ"))
+	fmt.Printf("  %s Stop:    go-db stop %s\n", info("→"), cfg.ContainerName)
+	fmt.Printf("  %s Start:   go-db start %s\n", info("→"), cfg.ContainerName)
+	fmt.Printf("  %s Remove:  go-db remove %s\n", info("→"), cfg.ContainerName)
+	fmt.Printf("  %s Logs:    docker logs %s\n", info("→"), cfg.ContainerName)
+
+	fmt.Printf("\n%s Connection String:\n", info("ℹ"))
+	fmt.Printf("  %s postgresql://%s:%s@0.0.0.0:%s/%s\n",
+		info("→"), cfg.Username, cfg.Password, cfg.Port, cfg.Database)
 }
