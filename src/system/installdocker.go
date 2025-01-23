@@ -18,7 +18,7 @@ var (
 	errColor = color.New(color.FgRed, color.Bold).SprintFunc()
 )
 
-// InstallDocker installs Docker on the current system
+// InstallDocker installs Docker on the current system!
 func InstallDocker() error {
 	fmt.Printf("%s Docker installation started\n", info("ℹ"))
 

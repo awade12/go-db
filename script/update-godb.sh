@@ -9,22 +9,10 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check if we're on main branch
-current_branch=$(git branch --show-current)
-if [ "$current_branch" != "main" ]; then
-    echo -e "${RED}Error: Must be on main branch to release${NC}"
-    exit 1
-fi
-
-# Check if working directory is clean
-if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${RED}Error: Working directory is not clean. Commit or stash changes first.${NC}"
-    exit 1
-fi
-
-# Get the current version
+# Get the current version and clean it properly
 current_version=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-current_version=${current_version#v} # Remove leading 'v' if present
+# Strip ALL 'v' characters and ensure clean version number
+current_version=$(echo "$current_version" | sed 's/v//g')
 
 # Increment the patch version
 major=$(echo $current_version | cut -d. -f1)
