@@ -8,12 +8,13 @@ import (
 	"github.com/awade12/go-db/src/databases/postgres"
 	"github.com/awade12/go-db/src/flags"
 	"github.com/awade12/go-db/src/system"
+	"github.com/awade12/go-db/src/utils"
 )
 
 func printUsage() {
 	fmt.Println("Usage: go-db <command> <database-type> [options]")
 	fmt.Println("\nCommands:")
-	fmt.Println("  create         Create a new database (easy mode)")
+	fmt.Println("  create         Create a new database (requires name)")
 	fmt.Println("  create-custom  Create a new database with custom configuration")
 	fmt.Println("  start          Start a stopped database")
 	fmt.Println("  stop           Stop a running database")
@@ -22,6 +23,7 @@ func printUsage() {
 	fmt.Println("\nDatabase Types:")
 	fmt.Println("  postgres       PostgreSQL database")
 	fmt.Println("\nCustom Mode Options (for create-custom):")
+	fmt.Println("  --name         Container and database name (required)")
 	fmt.Println("  --version      PostgreSQL version (default: 15)")
 	fmt.Println("  --port         Port to expose (default: 5432)")
 	fmt.Println("  --password     Database password")
@@ -30,7 +32,6 @@ func printUsage() {
 	fmt.Println("  --volume       Data volume path for persistence")
 	fmt.Println("  --memory       Memory limit (e.g., '1g')")
 	fmt.Println("  --cpu          CPU limit (e.g., '0.5')")
-	fmt.Println("  --name         Container name")
 	fmt.Println("  --timezone     Container timezone (default: UTC)")
 	fmt.Println("  --locale       Database locale (default: en_US.utf8)")
 	fmt.Println("  --network      Docker network to join (can be specified multiple times)")
@@ -44,8 +45,8 @@ func printUsage() {
 	fmt.Println("  stop <name>    Stop a running database container")
 	fmt.Println("  remove <name>  Remove a database container (use --force to force removal)")
 	fmt.Println("\nExamples:")
-	fmt.Println("  go-db create postgres")
-	fmt.Println("  go-db create-custom postgres --version 15 --port 5432 --password mysecretpassword --user myuser --db mydb --volume /data/postgres")
+	fmt.Println("  go-db create postgres mydb")
+	fmt.Println("  go-db create-custom postgres --name mydb")
 	fmt.Println("  go-db start mydb")
 	fmt.Println("  go-db stop mydb")
 	fmt.Println("  go-db remove mydb --force")
@@ -74,14 +75,16 @@ func main() {
 		return
 
 	case "create":
-		if len(os.Args) < 3 {
-			printUsage()
+		if len(os.Args) < 4 {
+			fmt.Printf("%s Error: create command requires a database type and name\n", utils.ErrColor("✘"))
+			fmt.Printf("%s Example: go-db create postgres mydb\n", utils.Info("→"))
 			os.Exit(1)
 		}
 		dbType := strings.ToLower(os.Args[2])
+		name := os.Args[3]
 		switch dbType {
 		case "postgres":
-			if err := postgres.Create(); err != nil {
+			if err := postgres.Create(name); err != nil {
 				fmt.Printf("Error creating PostgreSQL database: %v\n", err)
 				os.Exit(1)
 			}
@@ -99,6 +102,11 @@ func main() {
 		switch dbType {
 		case "postgres":
 			postgresFlags.CustomFlags.Parse(os.Args[3:])
+			if *postgresFlags.Name == "" {
+				fmt.Printf("%s Error: --name is required for create-custom\n", utils.ErrColor("✘"))
+				fmt.Printf("%s Example: go-db create-custom postgres --name mydb\n", utils.Info("→"))
+				os.Exit(1)
+			}
 			cfg := postgresFlags.BuildConfig()
 			if err := postgres.CreateWithConfig(cfg); err != nil {
 				fmt.Printf("Error creating PostgreSQL database: %v\n", err)

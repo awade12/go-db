@@ -7,22 +7,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
+	"github.com/awade12/go-db/src/utils"
 	"github.com/schollz/progressbar/v3"
 )
 
 var (
-	success  = color.New(color.FgGreen, color.Bold).SprintFunc()
-	info     = color.New(color.FgCyan).SprintFunc()
-	warn     = color.New(color.FgYellow).SprintFunc()
-	errColor = color.New(color.FgRed, color.Bold).SprintFunc()
+	success  = utils.Success
+	info     = utils.Info
+	warn     = utils.Warn
+	errColor = utils.ErrColor
 )
 
 const (
 	defaultPostgresVersion = "15"
 	defaultPort            = "5432"
 	defaultPassword        = "postgres"
-	defaultContainerName   = "go-dbs-postgres"
 )
 
 // findAvailablePort finds an available port starting from the given port
@@ -43,7 +42,7 @@ type Config struct {
 	Version       string
 	Port          string
 	Password      string
-	ContainerName string
+	ContainerName string // required: name of the container
 	Username      string
 	Database      string
 	Volume        string            // for persistent storage
@@ -54,23 +53,26 @@ type Config struct {
 	Environment   map[string]string // additional environment variables
 	Networks      []string          // docker networks to join
 	ExtraMounts   []string          // additional volume mounts
-	SSLMode       string            // SSL mode (disable, require, verify-ca, verify-full) -- will do automatically
-	SSLCert       string            // path to SSL certificate ---- will do automatically
-	SSLKey        string            // path to SSL key ---- will do automatically
-	SSLRootCert   string            // path to SSL root certificate ---- will do automatically
+	SSLMode       string            // SSL mode (disable, require, verify-ca, verify-full)
+	SSLCert       string            // path to SSL certificate
+	SSLKey        string            // path to SSL key
+	SSLRootCert   string            // path to SSL root certificate
 	Timezone      string            // container timezone
 	Locale        string            // database locale
 }
 
-// DefaultConfig returns a basic configuration
-func DefaultConfig() *Config {
+// DefaultConfig returns a basic configuration with a given name
+func DefaultConfig(name string) *Config {
+	if name == "" {
+		name = "postgres-" + time.Now().Format("20060102-150405")
+	}
 	return &Config{
 		Version:       defaultPostgresVersion,
 		Port:          defaultPort,
 		Password:      defaultPassword,
-		ContainerName: defaultContainerName,
+		ContainerName: name,
 		Username:      "postgres",
-		Database:      "postgres",
+		Database:      name, // Use the container name as the default database name
 		Environment:   make(map[string]string),
 		SSLMode:       "disable",
 		Timezone:      "UTC",
@@ -79,8 +81,8 @@ func DefaultConfig() *Config {
 }
 
 // Create sets up a new PostgreSQL database instance using Docker with default settings
-func Create() error {
-	return CreateWithConfig(DefaultConfig())
+func Create(name string) error {
+	return CreateWithConfig(DefaultConfig(name))
 }
 
 // CreateWithConfig sets up a new PostgreSQL instance with custom configuration
@@ -89,7 +91,11 @@ func CreateWithConfig(cfg *Config) error {
 		return fmt.Errorf("%s configuration cannot be nil", errColor("✘"))
 	}
 
-	fmt.Printf("%s Starting PostgreSQL setup...\n", info("ℹ"))
+	if cfg.ContainerName == "" {
+		return fmt.Errorf("%s container name is required", errColor("✘"))
+	}
+
+	fmt.Printf("%s Starting PostgreSQL setup for %s...\n", info("ℹ"), cfg.ContainerName)
 
 	// Check if Docker is installed
 	if _, err := exec.LookPath("docker"); err != nil {
@@ -315,8 +321,15 @@ func containerExists(name string) (exists bool, running bool) {
 }
 
 func printConnectionDetails(cfg *Config) {
+	// Get server IP
+	serverIP, err := utils.GetOutboundIP()
+	if err != nil {
+		serverIP = "localhost" // Fallback to localhost if IP detection fails
+		fmt.Printf("%s Warning: Could not detect server IP, using localhost\n", warn("⚠"))
+	}
+
 	fmt.Printf("\n%s Connection Details:\n", info("ℹ"))
-	fmt.Printf("  %s Host: %s\n", info("→"), "0.0.0.0")
+	fmt.Printf("  %s Host: %s\n", info("→"), serverIP)
 	fmt.Printf("  %s Port: %s\n", info("→"), cfg.Port)
 	fmt.Printf("  %s User: %s\n", info("→"), cfg.Username)
 	fmt.Printf("  %s Password: %s\n", info("→"), cfg.Password)
@@ -335,6 +348,14 @@ func printConnectionDetails(cfg *Config) {
 	fmt.Printf("  %s Logs:    docker logs %s\n", info("→"), cfg.ContainerName)
 
 	fmt.Printf("\n%s Connection String:\n", info("ℹ"))
-	fmt.Printf("  %s postgresql://%s:%s@0.0.0.0:%s/%s\n",
-		info("→"), cfg.Username, cfg.Password, cfg.Port, cfg.Database)
+	fmt.Printf("  %s postgresql://%s:%s@%s:%s/%s\n",
+		info("→"), cfg.Username, cfg.Password, serverIP, cfg.Port, cfg.Database)
+
+	// Try to get public IP for external access
+	publicIP, err := utils.GetPublicIP()
+	if err == nil && publicIP != serverIP {
+		fmt.Printf("\n%s External Connection String:\n", info("ℹ"))
+		fmt.Printf("  %s postgresql://%s:%s@%s:%s/%s\n",
+			info("→"), cfg.Username, cfg.Password, publicIP, cfg.Port, cfg.Database)
+	}
 }
