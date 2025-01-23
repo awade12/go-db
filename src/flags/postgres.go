@@ -9,26 +9,29 @@ import (
 
 // PostgresFlags holds all flag sets for PostgreSQL operations
 type PostgresFlags struct {
-	CustomFlags *flag.FlagSet
-	RemoveFlags *flag.FlagSet
-	Version     *string
-	Port        *string
-	Password    *string
-	User        *string
-	DBName      *string
-	Volume      *string
-	Memory      *string
-	CPU         *string
-	Name        *string
-	Timezone    *string
-	Locale      *string
-	Networks    *string
-	InitScripts *string
-	SSLMode     *string
-	SSLCert     *string
-	SSLKey      *string
-	SSLRootCert *string
-	ForceRemove *bool
+	CustomFlags   *flag.FlagSet
+	RemoveFlags   *flag.FlagSet
+	ListFlags     *flag.FlagSet
+	ShowFlags     *flag.FlagSet
+	Version       *string
+	Port          *string
+	Password      *string
+	User          *string
+	DBName        *string
+	Volume        *string
+	Memory        *string
+	CPU           *string
+	Name          *string
+	Timezone      *string
+	Locale        *string
+	Networks      *string
+	InitScripts   *string
+	SSLMode       *string
+	SSLCert       *string
+	SSLKey        *string
+	SSLRootCert   *string
+	ForceRemove   *bool
+	ShowContainer *string
 }
 
 // NewPostgresFlags initializes all PostgreSQL-related flags
@@ -36,6 +39,8 @@ func NewPostgresFlags() *PostgresFlags {
 	f := &PostgresFlags{
 		CustomFlags: flag.NewFlagSet("create-custom", flag.ExitOnError),
 		RemoveFlags: flag.NewFlagSet("remove", flag.ExitOnError),
+		ListFlags:   flag.NewFlagSet("list", flag.ExitOnError),
+		ShowFlags:   flag.NewFlagSet("show", flag.ExitOnError),
 	}
 
 	// Initialize create-custom flags
@@ -59,6 +64,9 @@ func NewPostgresFlags() *PostgresFlags {
 
 	// Initialize remove flags
 	f.ForceRemove = f.RemoveFlags.Bool("force", false, "Force container removal")
+
+	// Initialize show flags
+	f.ShowContainer = f.ShowFlags.String("container", "", "Container name to show details for")
 
 	return f
 }
