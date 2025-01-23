@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/fatih/color"
 )
@@ -15,10 +14,48 @@ var (
 	ErrColor = color.New(color.FgRed, color.Bold).SprintFunc()
 )
 
-// GetOutboundIP gets the preferred outbound IP of this machine
+// GetOutboundIP gets the preferred outbound IPv4 address of this machine
 func GetOutboundIP() (string, error) {
-	// Dial a UDP connection to a reliable IP (Google's DNS)
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	// Get all network interfaces
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "", fmt.Errorf("failed to get network interfaces: %v", err)
+	}
+
+	for _, iface := range ifaces {
+		// Skip loopback and inactive interfaces
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			// Check if it's an IP network address
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			// Skip IPv6 addresses
+			if ipNet.IP.To4() == nil {
+				continue
+			}
+
+			// Skip loopback and link-local addresses
+			if ipNet.IP.IsLoopback() || ipNet.IP.IsLinkLocalUnicast() {
+				continue
+			}
+
+			return ipNet.IP.String(), nil
+		}
+	}
+
+	// Fallback to the old method if no suitable interface is found
+	conn, err := net.Dial("udp4", "8.8.8.8:80") // Use udp4 to force IPv4
 	if err != nil {
 		return "", fmt.Errorf("failed to get outbound IP: %v", err)
 	}
@@ -28,24 +65,31 @@ func GetOutboundIP() (string, error) {
 	return localAddr.IP.String(), nil
 }
 
-// GetPublicIP attempts to get the public IP address
+// GetPublicIP attempts to get the public IPv4 address
 func GetPublicIP() (string, error) {
 	// Try multiple IP lookup services
 	services := []string{
-		"https://api.ipify.org",
-		"https://ifconfig.me",
-		"https://icanhazip.com",
+		"ipv4.icanhazip.com", // Explicitly IPv4
+		"ipv4.whatismyip.akamai.com",
+		"v4.ident.me",
 	}
 
 	for _, service := range services {
-		resp, err := net.Dial("tcp", strings.TrimPrefix(service, "https://")+":443")
+		dialer := &net.Dialer{
+			DualStack: false, // Disable IPv6
+		}
+
+		conn, err := dialer.Dial("tcp4", service+":80") // Use tcp4 to force IPv4
 		if err != nil {
 			continue
 		}
-		defer resp.Close()
+		defer conn.Close()
 
-		localAddr := resp.LocalAddr().(*net.TCPAddr)
-		return localAddr.IP.String(), nil
+		localAddr := conn.LocalAddr().(*net.TCPAddr)
+		ip := localAddr.IP.To4()
+		if ip != nil {
+			return ip.String(), nil
+		}
 	}
 
 	// Fallback to outbound IP if public IP lookup fails
