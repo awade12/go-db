@@ -2,7 +2,11 @@ package utils
 
 import (
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/fatih/color"
 )
@@ -65,30 +69,41 @@ func GetOutboundIP() (string, error) {
 	return localAddr.IP.String(), nil
 }
 
-// GetPublicIP attempts to get the public IPv4 address
+// GetPublicIP attempts to get the public IPv4 address using HTTP requests
 func GetPublicIP() (string, error) {
 	// Try multiple IP lookup services
 	services := []string{
-		"ipv4.icanhazip.com", // Explicitly IPv4
-		"ipv4.whatismyip.akamai.com",
-		"v4.ident.me",
+		"http://ipv4.icanhazip.com",
+		"http://api.ipify.org",
+		"http://ifconfig.me/ip",
+	}
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				DualStack: false, // Disable IPv6
+			}).DialContext,
+		},
 	}
 
 	for _, service := range services {
-		dialer := &net.Dialer{
-			DualStack: false, // Disable IPv6
-		}
-
-		conn, err := dialer.Dial("tcp4", service+":80") // Use tcp4 to force IPv4
+		resp, err := client.Get(service)
 		if err != nil {
 			continue
 		}
-		defer conn.Close()
+		defer resp.Body.Close()
 
-		localAddr := conn.LocalAddr().(*net.TCPAddr)
-		ip := localAddr.IP.To4()
-		if ip != nil {
-			return ip.String(), nil
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			continue
+		}
+
+		ip := strings.TrimSpace(string(body))
+		// Validate that we got an IPv4 address
+		parsedIP := net.ParseIP(ip)
+		if parsedIP != nil && parsedIP.To4() != nil {
+			return ip, nil
 		}
 	}
 
