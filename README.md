@@ -5,7 +5,7 @@ A simple CLI tool for managing databases in Docker containers. Currently support
 ## Installation
 
 ```bash
-go install github.com/YOUR_USERNAME/go-dbs@latest
+go install github.com/awade12/go-db@latest
 ```
 
 ## Requirements

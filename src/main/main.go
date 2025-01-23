@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"go-dbs/src/databases/postgres"
-	"go-dbs/src/flags"
+	"github.com/awade12/go-db/src/databases/postgres"
+	"github.com/awade12/go-db/src/flags"
 )
 
 func printUsage() {

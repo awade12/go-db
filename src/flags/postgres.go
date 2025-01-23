@@ -4,7 +4,7 @@ import (
 	"flag"
 	"strings"
 
-	"go-dbs/src/databases/postgres"
+	"github.com/awade12/go-db/src/databases/postgres"
 )
 
 // PostgresFlags holds all flag sets for PostgreSQL operations

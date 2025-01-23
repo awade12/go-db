@@ -1,3 +1,3 @@
-module go-dbs
+module github.com/awade12/go-db
 
 go 1.23.4
