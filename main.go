@@ -7,6 +7,7 @@ import (
 
 	"github.com/awade12/go-db/src/databases/postgres"
 	"github.com/awade12/go-db/src/flags"
+	"github.com/awade12/go-db/src/system"
 )
 
 func printUsage() {
@@ -17,6 +18,7 @@ func printUsage() {
 	fmt.Println("  start          Start a stopped database")
 	fmt.Println("  stop           Stop a running database")
 	fmt.Println("  remove         Remove a database container")
+	fmt.Println("  install-docker Install Docker on the current system")
 	fmt.Println("\nDatabase Types:")
 	fmt.Println("  postgres       PostgreSQL database")
 	fmt.Println("\nCustom Mode Options (for create-custom):")
@@ -47,6 +49,7 @@ func printUsage() {
 	fmt.Println("  go-db start mydb")
 	fmt.Println("  go-db stop mydb")
 	fmt.Println("  go-db remove mydb --force")
+	fmt.Println("  go-db install-docker  # Install Docker on the current system")
 }
 
 func main() {
@@ -62,6 +65,14 @@ func main() {
 
 	// Handle different commands
 	switch command {
+	case "install-docker":
+		if err := system.InstallDocker(); err != nil {
+			fmt.Printf("Error installing Docker: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Docker installed successfully!")
+		return
+
 	case "create":
 		if len(os.Args) < 3 {
 			printUsage()
