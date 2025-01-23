@@ -366,10 +366,19 @@ func printConnectionDetails(cfg *Config) {
 func List() error {
 	fmt.Printf("%s Listing PostgreSQL containers...\n", info("ℹ"))
 
-	cmd := exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}")
+	cmd := exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres:15", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("%s Failed to list containers: %v", errColor("✘"), err)
+	}
+
+	if len(output) == 0 {
+		// Try again with a more general filter if no containers found
+		cmd = exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}")
+		output, err = cmd.Output()
+		if err != nil {
+			return fmt.Errorf("%s Failed to list containers: %v", errColor("✘"), err)
+		}
 	}
 
 	if len(output) == 0 {
