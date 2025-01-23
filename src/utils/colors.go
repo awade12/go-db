@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -109,4 +111,61 @@ func GetPublicIP() (string, error) {
 
 	// Fallback to outbound IP if public IP lookup fails
 	return GetOutboundIP()
+}
+
+// GenerateSecurePassword generates a cryptographically secure password
+func GenerateSecurePassword() string {
+	// Define character sets
+	lowercase := "abcdefghijklmnopqrstuvwxyz"
+	uppercase := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	numbers := "0123456789"
+	symbols := "!@#$%^&*()_+-=[]{}|;:,.<>?"
+
+	// Ensure at least one character from each set
+	password := make([]byte, 20) // 20 characters total
+	password[0] = lowercase[secureRandomInt(len(lowercase))]
+	password[1] = uppercase[secureRandomInt(len(uppercase))]
+	password[2] = numbers[secureRandomInt(len(numbers))]
+	password[3] = symbols[secureRandomInt(len(symbols))]
+
+	// All possible characters for remaining positions
+	allChars := lowercase + uppercase + numbers + symbols
+
+	// Fill remaining positions with random characters
+	for i := 4; i < 20; i++ {
+		password[i] = allChars[secureRandomInt(len(allChars))]
+	}
+
+	// Shuffle the password to avoid predictable character positions
+	shuffleBytes(password)
+
+	return string(password)
+}
+
+// secureRandomInt generates a cryptographically secure random integer in range [0, max)
+func secureRandomInt(max int) int {
+	var b [4]byte
+	_, err := rand.Read(b[:])
+	if err != nil {
+		panic("failed to generate random number: " + err.Error())
+	}
+	return int(uint32(b[0])|uint32(b[1])<<8|uint32(b[2])<<16|uint32(b[3])<<24) % max
+}
+
+// shuffleBytes randomly shuffles a byte slice using Fisher-Yates algorithm
+func shuffleBytes(b []byte) {
+	for i := len(b) - 1; i > 0; i-- {
+		j := secureRandomInt(i + 1)
+		b[i], b[j] = b[j], b[i]
+	}
+}
+
+// GenerateRandomString generates a random string of specified length
+func GenerateRandomString(length int) string {
+	b := make([]byte, length)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic("failed to generate random string: " + err.Error())
+	}
+	return base64.URLEncoding.EncodeToString(b)[:length]
 }

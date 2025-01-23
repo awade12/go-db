@@ -21,7 +21,6 @@ var (
 const (
 	defaultPostgresVersion = "15"
 	defaultPort            = "5432"
-	defaultPassword        = "postgres"
 )
 
 // findAvailablePort finds an available port starting from the given port
@@ -69,7 +68,7 @@ func DefaultConfig(name string) *Config {
 	return &Config{
 		Version:       defaultPostgresVersion,
 		Port:          defaultPort,
-		Password:      defaultPassword,
+		Password:      utils.GenerateSecurePassword(),
 		ContainerName: name,
 		Username:      "postgres",
 		Database:      name, // Use the container name as the default database name
