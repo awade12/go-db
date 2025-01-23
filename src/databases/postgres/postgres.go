@@ -364,9 +364,9 @@ func printConnectionDetails(cfg *Config) {
 
 // List displays all PostgreSQL containers (both running and stopped)
 func List() error {
-	fmt.Printf("%s Listing PostgreSQL containers...\n", info("ℹ"))
+	fmt.Printf("\n%s PostgreSQL Containers\n", info("📦"))
 
-	cmd := exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres:15", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}")
+	cmd := exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres:15", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.ID}}")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("%s Failed to list containers: %v", errColor("✘"), err)
@@ -374,7 +374,7 @@ func List() error {
 
 	if len(output) == 0 {
 		// Try again with a more general filter if no containers found
-		cmd = exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}")
+		cmd = exec.Command("docker", "ps", "-a", "--filter", "ancestor=postgres", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.ID}}")
 		output, err = cmd.Output()
 		if err != nil {
 			return fmt.Errorf("%s Failed to list containers: %v", errColor("✘"), err)
@@ -382,30 +382,54 @@ func List() error {
 	}
 
 	if len(output) == 0 {
-		fmt.Printf("%s No PostgreSQL containers found\n", warn("⚠"))
+		fmt.Printf("\n  %s No PostgreSQL containers found\n\n", warn("⚠"))
 		return nil
 	}
 
-	fmt.Printf("\n%-30s %-20s %-30s\n", "NAME", "STATUS", "PORTS")
-	fmt.Printf("%s\n", strings.Repeat("-", 80))
+	// Print header with custom formatting
+	fmt.Printf("\n  %-20s %-15s %-15s %s\n", "NAME", "STATUS", "PORT", "CONTAINER ID")
+	fmt.Printf("  %s\n", strings.Repeat("─", 80))
 
 	containers := strings.Split(strings.TrimSpace(string(output)), "\n")
 	for _, container := range containers {
 		fields := strings.Split(container, "\t")
-		if len(fields) == 3 {
+		if len(fields) >= 3 {
 			name := fields[0]
 			status := fields[1]
 			ports := fields[2]
-
-			statusColor := warn
-			if strings.HasPrefix(status, "Up") {
-				statusColor = success
+			id := ""
+			if len(fields) > 3 {
+				id = fields[3][:12] // Show first 12 chars of container ID
 			}
 
-			fmt.Printf("%-30s %s%-20s%s %-30s\n",
-				name,
-				statusColor(""), status, utils.ResetColor(),
-				ports)
+			// Extract just the host port for cleaner display
+			port := "N/A"
+			if portMatch := strings.Split(ports, ":"); len(portMatch) > 1 {
+				port = strings.Split(portMatch[1], "-")[0]
+			}
+
+			// Status formatting
+			statusColor := warn
+			statusSymbol := "⭘"
+			if strings.HasPrefix(status, "Up") {
+				statusColor = success
+				statusSymbol = "⬤"
+			}
+
+			// Format the status to be more concise
+			shortStatus := "Stopped"
+			if strings.HasPrefix(status, "Up") {
+				upTime := strings.TrimPrefix(status, "Up ")
+				shortStatus = "Up " + upTime
+			}
+
+			fmt.Printf("  %-20s %s %-15s%s %-15s %s\n",
+				info(name),
+				statusColor(statusSymbol),
+				statusColor(shortStatus),
+				utils.ResetColor(),
+				port,
+				id)
 		}
 	}
 	fmt.Println()
