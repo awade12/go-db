@@ -7,7 +7,12 @@ set -e
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
+CHECK='\xE2\x9C\x94'
+CROSS='\xE2\x9C\x98'
+ARROW='\xE2\x9E\xA1'
 
 # Get the current version and clean it properly
 current_version=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
@@ -31,31 +36,31 @@ echo -e "${GREEN}Current version: v$current_version${NC}"
 echo -e "${GREEN}New version: v$new_version${NC}"
 
 # Run go mod tidy to ensure dependencies are up to date
-echo -e "${YELLOW}Running go mod tidy...${NC}"
-go mod tidy
+echo -e "${BLUE}${BOLD}📦 Updating dependencies...${NC}"
+go mod tidy && echo -e "${GREEN}${CHECK} Dependencies updated${NC}"
 
 # Add all changes
 git add .
 
 # Commit changes with a better format
-echo "Enter commit message (press enter to use 'chore: bump version to v$new_version'):"
+echo -e "${BLUE}${BOLD}💭 Enter commit message${NC} (press enter to use 'chore: bump version to v$new_version'):"
 read commit_msg
 if [ -z "$commit_msg" ]; then
     commit_msg="chore: bump version to v$new_version"
 fi
-git commit -m "$commit_msg"
+git commit -m "$commit_msg" && echo -e "${GREEN}${CHECK} Changes committed${NC}"
 
 # Create and push new tag
-echo -e "${YELLOW}Creating and pushing new tag...${NC}"
-git tag "v$new_version"
-git push origin main || { echo -e "${RED}Failed to push to main${NC}"; exit 1; }
-git push origin "v$new_version" || { echo -e "${RED}Failed to push tag${NC}"; exit 1; }
+echo -e "${BLUE}${BOLD}🏷️  Creating and pushing new tag...${NC}"
+git tag "v$new_version" && echo -e "${GREEN}${CHECK} Tag created${NC}"
+git push origin main || { echo -e "${RED}${CROSS} Failed to push to main${NC}"; exit 1; }
+git push origin "v$new_version" || { echo -e "${RED}${CROSS} Failed to push tag${NC}"; exit 1; }
 
-echo -e "${GREEN}Package updated and pushed successfully!${NC}"
-echo -e "${GREEN}New version v$new_version is now available${NC}"
+echo -e "\n${GREEN}${BOLD}${CHECK} Package updated successfully!${NC}"
+echo -e "${GREEN}${CHECK} New version v$new_version is now available${NC}\n"
 
 # Create a temporary directory for registering with proxy.golang.org
-echo -e "${YELLOW}Registering package with proxy.golang.org...${NC}"
+echo -e "${BLUE}${BOLD}📡 Registering package with proxy.golang.org...${NC}"
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT  # Ensure cleanup even if script fails
 
@@ -79,7 +84,7 @@ if ! curl -s "https://proxy.golang.org/github.com/awade12/go-db/@v/v$new_version
     exit 1
 fi
 
-echo -e "${GREEN}Package registered with proxy.golang.org${NC}"
+echo -e "${GREEN}${CHECK} Package registered with proxy.golang.org${NC}"
 echo ""
-echo -e "${GREEN}To update the package on other machines, run:${NC}"
-echo -e "${YELLOW}go install github.com/awade12/go-db@v$new_version${NC}"
+echo -e "${BLUE}${BOLD}📥 To update the package on other machines, run:${NC}"
+echo -e "${YELLOW}${ARROW} go install github.com/awade12/go-db@v$new_version${NC}"
