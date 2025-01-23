@@ -19,6 +19,8 @@ func printUsage() {
 	fmt.Println("  start          Start a stopped database")
 	fmt.Println("  stop           Stop a running database")
 	fmt.Println("  remove         Remove a database container")
+	fmt.Println("  list           List all database containers")
+	fmt.Println("  show           Show connection details for a database container")
 	fmt.Println("  install-docker Install Docker on the current system")
 	fmt.Println("\nDatabase Types:")
 	fmt.Println("  postgres       PostgreSQL database")
@@ -44,12 +46,14 @@ func printUsage() {
 	fmt.Println("  start <name>   Start a stopped database container")
 	fmt.Println("  stop <name>    Stop a running database container")
 	fmt.Println("  remove <name>  Remove a database container (use --force to force removal)")
+	fmt.Println("  show <name>    Show connection details for a specific container")
 	fmt.Println("\nExamples:")
 	fmt.Println("  go-db create postgres mydb")
 	fmt.Println("  go-db create-custom postgres --name mydb")
 	fmt.Println("  go-db start mydb")
 	fmt.Println("  go-db stop mydb")
 	fmt.Println("  go-db remove mydb --force")
+	fmt.Println("  go-db show mydb")
 	fmt.Println("  go-db install-docker  # Install Docker on the current system")
 }
 
@@ -145,6 +149,23 @@ func main() {
 		postgresFlags.RemoveFlags.Parse(os.Args[3:])
 		if err := postgres.Remove(os.Args[2], *postgresFlags.ForceRemove); err != nil {
 			fmt.Printf("Error removing container: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "list":
+		if err := postgres.List(); err != nil {
+			fmt.Printf("Error listing containers: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "show":
+		if len(os.Args) < 3 {
+			fmt.Printf("%s Error: show command requires a container name\n", utils.ErrColor("✘"))
+			fmt.Printf("%s Example: go-db show mydb\n", utils.Info("→"))
+			os.Exit(1)
+		}
+		if err := postgres.ShowConnectionDetails(os.Args[2]); err != nil {
+			fmt.Printf("Error showing container details: %v\n", err)
 			os.Exit(1)
 		}
 
